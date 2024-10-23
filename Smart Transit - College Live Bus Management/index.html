@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Tracking System</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .content {
+            margin-left: 210px;
+            padding: 20px;
+        }
+
+        .header {
+            background-color: #f96332;
+            color: white;
+            padding: 10px;
+            font-size: 15px;
+            margin-bottom: 14px;
+        }
+
+        .btn-add {
+            background-color: #f96332;
+            color: white;
+            margin-bottom: 14px;
+        }
+
+        .btn-edit, .btn-view, .btn-delete {
+            margin: 0 5px;
+        }
+
+        .table th, .table td {
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <div class="header">Bus Details</div>
+
+        <div class="table-container">
+            <button class="btn btn-add" id="addBusBtn">+ Add Bus</button>
+            <input type="text" id="searchBar" class="form-control" placeholder="Search Buses...">
+
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Serial No.</th>
+                        <th>Bus Number</th>
+                        <th>Template Number</th>
+                        <th>Driver Name</th>
+                        <th>Driver Photo</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="busTableBody">
+                    <!-- Bus details will be injected here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div class="modal" tabindex="-1" role="dialog" id="busModal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">+ Add Bus</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="busForm">
+                        <div class="form-group">
+                            <label for="busNumber">Bus Number (Integer)</label>
+                            <input type="number" class="form-control" id="busNumber" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="templateNumber">Bus Template Number</label>
+                            <input type="text" class="form-control" id="templateNumber" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="driverName">Driver Name</label>
+                            <input type="text" class="form-control" id="driverName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="driverPhoto">Driver Photo</label>
+                            <input type="file" class="form-control" id="driverPhoto" accept="image/*" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="status">Status</label>
+                            <select class="form-control" id="status" required>
+                                <option value="Departed">Departed</option>
+                                <option value="Arrived">Arrived</option>
+                                <option value="Stopped">Stopped</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="saveBusBtn">Save</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let busData = JSON.parse(localStorage.getItem('busData')) || [];
+        let editMode = false;
+        let editIndex = -1;
+
+        // Render the bus table with sorted data
+        function renderBusTable(data) {
+            const busTableBody = document.getElementById('busTableBody');
+            busTableBody.innerHTML = '';
+            // Sort buses by Bus Number
+            data.sort((a, b) => a.busNumber - b.busNumber);  // Bus number sorted as integers
+            data.forEach((bus, index) => {
+                const row = `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${bus.busNumber}</td>
+                        <td>${bus.templateNumber}</td>
+                        <td>${bus.driverName}</td>
+                        <td><a href="#" onclick="viewDriverPhoto('${bus.driverPhoto}')">${bus.driverPhoto}</a></td>
+                        <td>${bus.status}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm btn-edit" onclick="editBus(${index})">Edit</button>
+                            <button class="btn btn-info btn-sm btn-view" onclick="viewBus(${index})">View</button>
+                            <button class="btn btn-danger btn-sm btn-delete" onclick="deleteBus(${index})">Delete</button>
+                        </td>
+                    </tr>
+                `;
+                busTableBody.insertAdjacentHTML('beforeend', row);
+            });
+        }
+
+        // Save the bus data to localStorage
+        function saveToLocalStorage() {
+            localStorage.setItem('busData', JSON.stringify(busData));
+        }
+
+        document.getElementById('addBusBtn').addEventListener('click', () => {
+            editMode = false;
+            editIndex = -1;
+            document.getElementById('busForm').reset();
+            document.getElementById('modalTitle').innerText = 'Add Bus';
+            $('#busModal').modal('show');
+        });
+
+        document.getElementById('saveBusBtn').addEventListener('click', () => {
+            const busNumber = parseInt(document.getElementById('busNumber').value.trim());
+            const templateNumber = document.getElementById('templateNumber').value.trim();
+            const driverName = document.getElementById('driverName').value.trim();
+            const status = document.getElementById('status').value;
+            const driverPhotoInput = document.getElementById('driverPhoto');
+            const driverPhoto = driverPhotoInput.files[0] ? driverPhotoInput.files[0].name : '';
+
+            if (!Number.isInteger(busNumber)) {
+                alert('Bus Number must be an integer.');
+                return;
+            }
+
+            const isDuplicate = busData.some((bus, index) => 
+                bus.busNumber === busNumber && index !== editIndex
+            );
+
+            if (isDuplicate) {
+                alert('Bus with the same number already exists.');
+                return;
+            }
+
+            const newBus = { busNumber, templateNumber, driverName, driverPhoto, status };
+
+            if (editMode) {
+                busData[editIndex] = newBus;
+            } else {
+                busData.push(newBus);
+            }
+
+            saveToLocalStorage();
+            renderBusTable(busData);
+            $('#busModal').modal('hide');
+        });
+
+        function editBus(index) {
+            const bus = busData[index];
+            document.getElementById('busNumber').value = bus.busNumber;
+            document.getElementById('templateNumber').value = bus.templateNumber;
+            document.getElementById('driverName').value = bus.driverName;
+            document.getElementById('status').value = bus.status;
+
+            editMode = true;
+            editIndex = index;
+            document.getElementById('modalTitle').innerText = 'Edit Bus';
+            $('#busModal').modal('show');
+        }
+
+        function viewBus(index) {
+            const bus = busData[index];
+            alert(`Bus Number: ${bus.busNumber}\nTemplate Number: ${bus.templateNumber}\nDriver Name: ${bus.driverName}\nStatus: ${bus.status}`);
+        }
+
+        function viewDriverPhoto(photoName) {
+            alert(`Viewing photo: ${photoName}`);
+        }
+
+        function deleteBus(index) {
+            if (confirm('Are you sure you want to delete this bus?')) {
+                busData.splice(index, 1);
+                saveToLocalStorage();
+                renderBusTable(busData);
+            }
+        }
+
+        document.getElementById('searchBar').addEventListener('input', (event) => {
+            const query = event.target.value.toLowerCase();
+            const filteredData = busData.filter(bus =>
+                bus.busNumber.toString().includes(query) ||
+                bus.templateNumber.toLowerCase().includes(query) ||
+                bus.driverName.toLowerCase().includes(query)
+            );
+            renderBusTable(filteredData);
+        });
+
+        // Initial render of the table
+        renderBusTable(busData);
+    </script>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
